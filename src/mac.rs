@@ -1,14 +1,22 @@
+use crate::Error;
+
 use std::ops::Deref;
 use std::slice;
 use std::str;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use cocoa::{
     appkit::NSSpellChecker,
     base::{id, nil, NO},
     foundation::{NSInteger, NSNotFound, NSString, NSUInteger},
 };
-use lazy_static::lazy_static;
+
+fn checker() -> &'static Mutex<NSSpellCheckerWrapper> {
+    static CHECKER: OnceLock<Mutex<NSSpellCheckerWrapper>> = OnceLock::new();
+    CHECKER.get_or_init(|| {
+        Mutex::new(unsafe { NSSpellCheckerWrapper(NSSpellChecker::sharedSpellChecker(nil)) })
+    })
+}
 
 /// `NSSpellChecker` is not thread safe. It should only be used from one thread, or it will cause
 /// spurious `EXC_BAD_ACCESS` errors. If access to it is synchronized, however, it should be safe
@@ -25,11 +33,6 @@ impl Deref for NSSpellCheckerWrapper {
     }
 }
 
-lazy_static! {
-    static ref CHECKER: Mutex<NSSpellCheckerWrapper> =
-        Mutex::new(unsafe { NSSpellCheckerWrapper(NSSpellChecker::sharedSpellChecker(nil)) });
-}
-
 #[derive(Debug)]
 pub struct Checker {
     document_tag: NSInteger,
@@ -38,7 +41,7 @@ pub struct Checker {
 impl Drop for Checker {
     fn drop(&mut self) {
         unsafe {
-            CHECKER
+            checker()
                 .lock()
                 .unwrap()
                 .closeSpellDocumentWithTag(self.document_tag)
@@ -47,16 +50,16 @@ impl Drop for Checker {
 }
 
 impl Checker {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> Result<Self, Error> {
+        Ok(Self {
             document_tag: unsafe { NSSpellChecker::uniqueSpellDocumentTag(nil) },
-        }
+        })
     }
 
     pub fn ignore(&mut self, word: &str) {
         let word = unsafe { NSString::alloc(nil).init_str(word) };
         unsafe {
-            CHECKER
+            checker()
                 .lock()
                 .unwrap()
                 .ignoreWord_inSpellDocumentWithTag(word, self.document_tag)
@@ -64,12 +67,12 @@ impl Checker {
     }
 
     pub fn check(&mut self, text: &str) -> impl Iterator<Item = SpellingError> {
-        let text = unsafe { NSString::alloc(nil).init_str(text) };
-
         SpellcheckIter {
             document_tag: self.document_tag,
-            text: text,
-            offset: 0,
+            ns_text: unsafe { NSString::alloc(nil).init_str(text)},
+            ns_offset: 0,
+            original: text.to_owned(),
+            byte_cursor: 0,
         }
     }
 }
@@ -77,18 +80,22 @@ impl Checker {
 #[derive(Debug)]
 pub struct SpellingError {
     text: String,
+    start: usize,
+    end: usize,
 }
 
 impl SpellingError {
-    pub fn text(&self) -> &str {
-        &self.text
-    }
+    pub fn text(&self) -> &str { &self.text }
+    pub fn start(&self) -> usize { self.start }
+    pub fn end(&self) -> usize { self.end }
 }
 
 struct SpellcheckIter {
-    text: id, /* NSString */
     document_tag: NSInteger,
-    offset: NSUInteger,
+    ns_text: id, /* NSString */
+    ns_offset: NSUInteger,
+    original: String,
+    byte_cursor: usize,
 }
 
 impl Iterator for SpellcheckIter {
@@ -97,10 +104,10 @@ impl Iterator for SpellcheckIter {
     fn next(&mut self) -> Option<Self::Item> {
         let (range, _) =
             unsafe {
-                CHECKER.lock().unwrap()
+                checker().lock().unwrap()
                 .checkSpellingOfString_startingAt_language_wrap_inSpellDocumentWithTag_wordCount(
-                    self.text,
-                    self.offset as NSInteger,
+                    self.ns_text,
+                    self.ns_offset as NSInteger,
                     nil,
                     NO,
                     self.document_tag,
@@ -111,16 +118,22 @@ impl Iterator for SpellcheckIter {
             return None;
         };
 
-        self.offset = range.location + range.length;
-
         let misspelling = unsafe {
-            let misspelling = self.text.substringWithRange(range);
+            let misspelling = self.ns_text.substringWithRange(range);
             let misspelling_bytes = misspelling.UTF8String() as *const u8;
             str::from_utf8(slice::from_raw_parts(misspelling_bytes, misspelling.len())).unwrap()
         };
-
+        let rest = &self.original[self.byte_cursor..];
+        let rel = rest.find(misspelling)?;
+        let start = self.byte_cursor + rel;
+        let end = start + misspelling.len();
+        self.byte_cursor = end;
+        self.ns_offset = range.location + range.length;
+        
         Some(SpellingError {
             text: misspelling.to_owned(),
+            start,
+            end,
         })
     }
 }

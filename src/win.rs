@@ -1,3 +1,5 @@
+use crate::Error;
+
 use std::ffi::OsStr;
 use std::fmt::{self, Debug};
 use std::iter;
@@ -9,7 +11,7 @@ use winapi::{
     Class,
     Interface,
     shared::{
-        winerror::{SUCCEEDED, S_FALSE},
+        winerror::{SUCCEEDED, S_FALSE, S_OK},
         wtypesbase::CLSCTX_INPROC_SERVER,
     },
     um::{
@@ -57,16 +59,27 @@ fn wide_string(s: &str) -> Vec<u16> {
     OsStr::new(s).encode_wide().chain(iter::once(0)).collect()
 }
 
+fn utf16_offset_to_utf8(s: &str, utf16_units: usize) -> usize {
+    let mut units = 0;
+    for (byte_idx, ch) in s.char_indices() {
+        if units >= utf16_units {
+            return byte_idx;
+        }
+        units += ch.len_utf16();
+    }
+    s.len()
+}
+
 #[derive(Debug)]
 pub struct Checker {
     checker: ComPtr<ISpellChecker>,
 }
 
 impl Checker {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self, Error> {
         let hr = unsafe { CoInitializeEx(ptr::null_mut(), COINIT_MULTITHREADED) };
-        if !SUCCEEDED(hr) {
-            panic!("could not initialize COM: {:?}", hr);
+        if hr != S_OK && hr != S_FALSE {
+            return Err(Error::Unavailable);
         }
 
         let mut obj = ptr::null_mut();
@@ -80,36 +93,47 @@ impl Checker {
             )
         };
 
-        assert!(SUCCEEDED(hr), "could not create spellchecker factory instance");
+        if !SUCCEEDED(hr) {
+            return Err(Error::Unavailable);
+        }
         let factory = ComPtr::new(obj as *mut ISpellCheckerFactory);
 
         let mut checker = ptr::null_mut();
         let lang = wide_string("en-US");
         let hr = unsafe { (*factory).CreateSpellChecker(lang.as_ptr(), &mut checker) };
-        assert!(SUCCEEDED(hr), "could not create spellchecker instance");
+        if !SUCCEEDED(hr) {
+            return Err(Error::Unavailable);
+        }
         let checker = ComPtr::new(checker);
 
-        Checker {
-            checker,
-        }
+        Ok(Checker { checker })
     }
 
     pub fn check(&mut self, text: &str) -> impl Iterator<Item = SpellingError> {
         if text.is_empty() {
             return ErrorIter {
+                original: String::new(),
                 text: vec![],
                 iter: None,
             };
         }
 
-        let text = wide_string(text);
+        let original = text.to_owned();
+        let wide = wide_string(text);
         let mut errors = ptr::null_mut();
-        let hr = unsafe { (*self.checker).ComprehensiveCheck(text.as_ptr(), &mut errors) };
-        assert!(SUCCEEDED(hr));
+        let hr = unsafe { (*self.checker).ComprehensiveCheck(wide.as_ptr(), &mut errors) };
+        if !SUCCEEDED(hr) {
+            return ErrorIter {
+                original,
+                text: wide,
+                iter: None,
+            };
+        }
         let errors = ComPtr::new(errors);
 
         ErrorIter {
-            text,
+            original,
+            text: wide,
             iter: Some(errors),
         }
     }
@@ -121,11 +145,14 @@ impl Checker {
 
         let word = wide_string(word);
         let hr = unsafe { (*self.checker).Ignore(word.as_ptr()) };
-        assert!(SUCCEEDED(hr));
+        if !SUCCEEDED(hr) {
+            return;
+        }
     }
 }
 
 struct ErrorIter {
+    original: String,
     text: Vec<u16>,
     iter: Option<ComPtr<IEnumSpellingError>>,
 }
@@ -148,13 +175,18 @@ impl Iterator for ErrorIter {
                 (*err).get_StartIndex(&mut start);
             }
 
-            let start = start as usize;
-            let length = length as usize;
+            let utf16_start = start as usize;
+            let utf16_len = length as usize;
 
-            let err_text = String::from_utf16(&self.text[start..start + length]).unwrap();
+            let err_text = String::from_utf16(&self.text[utf16_start..utf16_start + utf16_len]).ok()?;
+
+            let byte_start = utf16_offset_to_utf8(&self.original, utf16_start);
+            let byte_end = utf16_offset_to_utf8(&self.original, utf16_start + utf16_len);
 
             return Some(SpellingError {
                 text: err_text,
+                start: byte_start,
+                end: byte_end,
             });
         } else {
             None
@@ -164,10 +196,12 @@ impl Iterator for ErrorIter {
 
 pub struct SpellingError {
     text: String,
+    start: usize,
+    end: usize,
 }
 
 impl SpellingError {
-    pub fn text(&self) -> &str {
-        &self.text
-    }
+    pub fn text(&self) -> &str { &self.text }
+    pub fn start(&self) -> usize { self.start }
+    pub fn end(&self) -> usize { self.end }
 }
