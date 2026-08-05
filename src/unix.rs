@@ -1,12 +1,31 @@
+use crate::Error;
+
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use hunspell_sys::{Hunhandle, Hunspell_add, Hunspell_create, Hunspell_destroy, Hunspell_spell};
-use lazy_static::lazy_static;
 
-lazy_static! {
-    static ref SEARCH_PATH: Vec<&'static Path> = vec![Path::new("/usr/share/hunspell"),];
+const DICT_DIRS: &[&str] = &[
+    "/usr/share/hunspell",
+    "/usr/share/myspell/dicts",
+    "/usr/share/myspell",
+    "/usr/local/share/hunspell",
+];
+
+const DEFAULT_LOCALES: &[&str] = &["en_US", "en_GB"];
+
+fn find_dictionary() -> Option<(PathBuf, PathBuf)> {
+    for dir in DICT_DIRS {
+        for locale in DEFAULT_LOCALES {
+            let aff = Path::new(dir).join(format!("{locale}.aff"));
+            let dic = Path::new(dir).join(format!("{locale}.dic"));
+            if aff.is_file() && dic.is_file() {
+                return Some((aff, dic));
+            }
+        }
+    }
+    None
 }
 
 #[derive(Debug)]
@@ -15,28 +34,17 @@ pub struct Checker {
 }
 
 impl Checker {
-    pub fn new() -> Self {
-        let hunspell = SEARCH_PATH
-            .iter()
-            .find_map(|path| {
-                let aff = path.join("en_US.aff");
-                let dic = path.join("en_US.dic");
+    pub fn new() -> Result<Self, Error> {
+        let (aff, dic) = find_dictionary().ok_or(Error::Unavailable)?;
 
-                if aff.exists() && dic.exists() {
-                    let hunspell = unsafe {
-                        Hunspell_create(
-                            aff.as_os_str().as_bytes().as_ptr() as *const i8,
-                            dic.as_os_str().as_bytes().as_ptr() as *const i8,
-                        )
-                    };
-                    Some(hunspell)
-                } else {
-                    None
-                }
-            })
-            .unwrap();
+        let hunspell = unsafe {
+            Hunspell_create(
+                aff.as_os_str().as_bytes().as_ptr() as *const i8,
+                dic.as_os_str().as_bytes().as_ptr() as *const i8,
+            )
+        };
 
-        Checker { hunspell }
+        Ok(Checker { hunspell })
     }
 
     pub fn check<'a, 'b: 'a>(
@@ -45,16 +53,17 @@ impl Checker {
     ) -> impl Iterator<Item = SpellingError> + 'a {
         let hunspell = self.hunspell;
 
-        text.split_whitespace().flat_map(move |word| {
-            let cstr = CString::new(word).unwrap();
-            let bytes = cstr.as_bytes_with_nul();
-            let is_recognized =
-                unsafe { Hunspell_spell(hunspell, bytes.as_ptr() as *const i8) } != 0;
-
-            if !is_recognized {
-                Some(SpellingError { word: cstr })
-            } else {
+        words(text).filter_map(move |(start, end, word)| {
+            let cstr = CString::new(word).ok()?;
+            let ok = unsafe { Hunspell_spell(hunspell, cstr.as_bytes_with_nul().as_ptr() as *const i8) } != 0;
+            if ok {
                 None
+            } else {
+                Some(SpellingError {
+                    text: word.to_owned(),
+                    start,
+                    end,
+                })
             }
         })
     }
@@ -75,11 +84,39 @@ impl Drop for Checker {
 }
 
 pub struct SpellingError {
-    word: CString,
+    text: String,
+    start: usize,
+    end: usize,
 }
 
 impl SpellingError {
-    pub fn text(&self) -> &str {
-        self.word.to_str().expect("original String is UTF-8")
+    pub fn text(&self) -> &str { &self.text }
+    pub fn start(&self) -> usize { self.start }
+    pub fn end(&self) -> usize { self.end }
+}
+
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '\''
+}
+
+fn words(text: &str) -> impl Iterator<Item = (usize, usize, &str)> {
+    let mut words = Vec::new();
+    let mut chars = text.char_indices().peekable();
+    
+    while let Some((start, c)) = chars.next() {
+        if !is_word_char(c) {
+            continue;
+        }
+    
+        let mut end = start + c.len_utf8();
+        while let Some(&(i, next)) = chars.peek() {
+            if !is_word_char(next) {
+                break;
+            }
+            end = i + next.len_utf8();
+            chars.next();
+        }
+        words.push((start, end, &text[start..end]));
     }
+    words.into_iter()
 }
