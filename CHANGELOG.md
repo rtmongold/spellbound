@@ -6,6 +6,10 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Pass null-terminated dictionary paths to Hunspell on Linux (stops spurious
+  `cannot open …aff` stderr noise)
+
 ## [0.2.0] - 2026-08-06
 
 ### Breaking
