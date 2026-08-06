@@ -6,7 +6,10 @@ categories = ["os", "text-processing"]
 documentation = "https://docs.rs/spellbound"
 repository = "https://github.com/rtmongold/spellbound"
 version = "0.2.0"
-authors = ["Andy Russell <arussell123@gmail.com>"]
+authors = [
+    "Andy Russell <arussell123@gmail.com>",
+    "Robert Mongold <rtmongold@gmail.com>"
+]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 readme = "README.md"

@@ -43,3 +43,7 @@ Without a dictionary, `Checker::new()` returns `Error::Unavailable`.
 
 ## License
 MIT OR Apache-2.0
+
+## Credits
+
+Originally by [Andy Russell](https://github.com/euclio). Maintained in this fork by Robert Mongold.
