@@ -2,11 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
-this project follows [Semantic Versioning](https://semver.org/).
+This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Maintained fork of [euclio/spellbound](https://github.com/euclio/spellbound).
+## [0.2.0] - 2026-08-06
 
 ### Breaking
 - `Checker::new()` now returns `Result<Self, Error>` instead of panicking when
@@ -31,7 +31,7 @@ Maintained fork of [euclio/spellbound](https://github.com/euclio/spellbound).
 - `hunspell-sys` 0.1.3 → 0.3.1 on Linux
 
 ### Removed
-- Travis CI and APPVeyor configs
+- Travis CI and AppVeyor configs
 
 ## [0.1.1] - 2020-02-05
 
