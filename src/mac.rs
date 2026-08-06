@@ -69,7 +69,7 @@ impl Checker {
     pub fn check(&mut self, text: &str) -> impl Iterator<Item = SpellingError> {
         SpellcheckIter {
             document_tag: self.document_tag,
-            ns_text: unsafe { NSString::alloc(nil).init_str(text)},
+            ns_text: unsafe { NSString::alloc(nil).init_str(text) },
             ns_offset: 0,
             original: text.to_owned(),
             byte_cursor: 0,
@@ -85,9 +85,15 @@ pub struct SpellingError {
 }
 
 impl SpellingError {
-    pub fn text(&self) -> &str { &self.text }
-    pub fn start(&self) -> usize { self.start }
-    pub fn end(&self) -> usize { self.end }
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+    pub fn start(&self) -> usize {
+        self.start
+    }
+    pub fn end(&self) -> usize {
+        self.end
+    }
 }
 
 struct SpellcheckIter {
@@ -129,7 +135,7 @@ impl Iterator for SpellcheckIter {
         let end = start + misspelling.len();
         self.byte_cursor = end;
         self.ns_offset = range.location + range.length;
-        
+
         Some(SpellingError {
             text: misspelling.to_owned(),
             start,

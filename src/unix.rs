@@ -55,7 +55,9 @@ impl Checker {
 
         words(text).filter_map(move |(start, end, word)| {
             let cstr = CString::new(word).ok()?;
-            let ok = unsafe { Hunspell_spell(hunspell, cstr.as_bytes_with_nul().as_ptr() as *const i8) } != 0;
+            let ok =
+                unsafe { Hunspell_spell(hunspell, cstr.as_bytes_with_nul().as_ptr() as *const i8) }
+                    != 0;
             if ok {
                 None
             } else {
@@ -71,7 +73,12 @@ impl Checker {
     pub fn ignore(&mut self, word: &str) {
         let cstr = CString::new(word).unwrap();
 
-        unsafe { Hunspell_add(self.hunspell, cstr.as_bytes_with_nul().as_ptr() as *const i8) };
+        unsafe {
+            Hunspell_add(
+                self.hunspell,
+                cstr.as_bytes_with_nul().as_ptr() as *const i8,
+            )
+        };
     }
 }
 
@@ -90,9 +97,15 @@ pub struct SpellingError {
 }
 
 impl SpellingError {
-    pub fn text(&self) -> &str { &self.text }
-    pub fn start(&self) -> usize { self.start }
-    pub fn end(&self) -> usize { self.end }
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+    pub fn start(&self) -> usize {
+        self.start
+    }
+    pub fn end(&self) -> usize {
+        self.end
+    }
 }
 
 fn is_word_char(c: char) -> bool {
@@ -102,12 +115,12 @@ fn is_word_char(c: char) -> bool {
 fn words(text: &str) -> impl Iterator<Item = (usize, usize, &str)> {
     let mut words = Vec::new();
     let mut chars = text.char_indices().peekable();
-    
+
     while let Some((start, c)) = chars.next() {
         if !is_word_char(c) {
             continue;
         }
-    
+
         let mut end = start + c.len_utf8();
         while let Some(&(i, next)) = chars.peek() {
             if !is_word_char(next) {
