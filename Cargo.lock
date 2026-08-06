@@ -339,6 +339,7 @@ dependencies = [
  "cfg-if 0.1.7",
  "cocoa",
  "hunspell-sys",
+ "objc",
  "winapi",
 ]
 

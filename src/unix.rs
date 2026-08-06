@@ -34,12 +34,9 @@ fn find_dictionary(locales: &[&str]) -> Option<(PathBuf, PathBuf)> {
 
 fn open_dictionary(locales: &[&str]) -> Result<*mut Hunhandle, Error> {
     let (aff, dic) = find_dictionary(locales).ok_or(Error::Unavailable)?;
-    let hunspell = unsafe {
-        Hunspell_create(
-            aff.as_os_str().as_bytes().as_ptr() as *const i8,
-            dic.as_os_str().as_bytes().as_ptr() as *const i8,
-        )
-    };
+    let aff_c = CString::new(aff.as_os_str().as_bytes()).map_err(|_| Error::Unavailable)?;
+    let dic_c = CString::new(dic.as_os_str().as_bytes()).map_err(|_| Error::Unavailable)?;
+    let hunspell = unsafe { Hunspell_create(aff_c.as_ptr(), dic_c.as_ptr()) };
     if hunspell.is_null() {
         return Err(Error::Unavailable);
     }
