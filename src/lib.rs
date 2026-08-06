@@ -39,6 +39,26 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+fn normalize_locale(locale: &str) -> (String, String) {
+    let mut parts = locale
+        .trim()
+        .split(['_', '-'])
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>();
+
+    if let Some(lang) = parts.first_mut() {
+        *lang = lang.to_lowercase();
+    }
+    if let Some(region) = parts.get_mut(1) {
+        *region = region.to_uppercase();
+    }
+
+    let hunspell = parts.join("_");
+    let bcp47 = parts.join("-");
+    (hunspell, bcp47)
+}
+
 cfg_if! {
     if #[cfg(target_os = "macos")] {
         mod mac;
@@ -62,6 +82,17 @@ impl Checker {
     /// Create an instance of the system spell checker.
     pub fn new() -> Result<Self, Error> {
         Ok(Checker(imp::Checker::new()?))
+    }
+
+    /// Create a checker for a specific locale (`en_US` or `en-US` both work).
+    pub fn with_locale(locale: &str) -> Result<Self, Error> {
+        let (hunspell, bcp47) = normalize_locale(locale);
+        Ok(Checker(imp::Checker::with_locale(&hunspell, &bcp47)?))
+    }
+
+    /// Spelling suggestions for `word` (may be empty).
+    pub fn suggest(&self, word: &str) -> Vec<String> {
+        self.0.suggest(word)
     }
 
     /// Check a text for spelling errors. Returns an iterator over the errors present in the text.
@@ -169,5 +200,24 @@ mod tests {
         let mut checker = Checker::new().unwrap();
 
         assert_eq!(checker.check("foobarbaz").count(), 1);
+    }
+
+    #[test]
+    fn with_locale_en_us() {
+        assert!(Checker::with_locale("en_US").is_ok());
+        assert!(Checker::with_locale("en-US").is_ok());
+    }
+
+    #[test]
+    #[cfg(all(unix, not(target_os = "macos")))]
+    fn with_locale_unknown() {
+        assert!(Checker::with_locale("zz_ZZ").is_err());
+    }
+
+    #[test]
+    fn suggest_misspelling() {
+        let checker = Checker::new().unwrap();
+        let suggestions = checker.suggest("beleeve");
+        assert!(!suggestions.is_empty());
     }
 }
