@@ -85,9 +85,15 @@ pub struct SpellingError(imp::SpellingError);
 
 impl SpellingError {
     /// Returns the text of the misspelled word.
-    pub fn text(&self) -> &str { self.0.text() }
-    pub fn start(&self) -> usize { self.0.start() }
-    pub fn end(&self) -> usize { self.0.end() }
+    pub fn text(&self) -> &str {
+        self.0.text()
+    }
+    pub fn start(&self) -> usize {
+        self.0.start()
+    }
+    pub fn end(&self) -> usize {
+        self.0.end()
+    }
 }
 
 #[cfg(test)]
@@ -98,14 +104,14 @@ mod tests {
     fn no_errors() {
         let text = "I'm happy that this sentence has no errors.";
         let mut checker = Checker::new().unwrap();
-        assert_eq!(checker.check(&text).count(), 0);
+        assert_eq!(checker.check(text).count(), 0);
     }
 
     #[test]
     fn single_error() {
         let text = "asdf";
         let mut checker = Checker::new().unwrap();
-        let errors = checker.check(&text).collect::<Vec<_>>();
+        let errors = checker.check(text).collect::<Vec<_>>();
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].text(), "asdf");
         assert_eq!(&text[errors[0].start()..errors[0].end()], "asdf");
@@ -115,7 +121,7 @@ mod tests {
     fn multiple_errors() {
         let text = "asdf hjkl qwer uiop";
         let mut checker = Checker::new().unwrap();
-        let errors = checker.check(&text).collect::<Vec<_>>();
+        let errors = checker.check(text).collect::<Vec<_>>();
         assert_eq!(errors.len(), 4);
         assert_eq!(errors[0].text(), "asdf");
         assert_eq!(errors[1].text(), "hjkl");

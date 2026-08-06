@@ -8,24 +8,28 @@ use std::os::windows::ffi::OsStrExt;
 use std::ptr::{self, NonNull};
 
 use winapi::{
-    Class,
-    Interface,
     shared::{
         winerror::{SUCCEEDED, S_FALSE, S_OK},
         wtypesbase::CLSCTX_INPROC_SERVER,
     },
     um::{
-        combaseapi::{CoInitializeEx, CoCreateInstance},
+        combaseapi::{CoCreateInstance, CoInitializeEx},
         objbase::COINIT_MULTITHREADED,
-        spellcheck::{IEnumSpellingError, SpellCheckerFactory, ISpellChecker, ISpellCheckerFactory},
+        spellcheck::{
+            IEnumSpellingError, ISpellChecker, ISpellCheckerFactory, SpellCheckerFactory,
+        },
         unknwnbase::IUnknown,
     },
+    Class, Interface,
 };
 
 struct ComPtr<T>(NonNull<T>);
 
 impl<T> ComPtr<T> {
-    fn new(p: *mut T) -> ComPtr<T> where T: Interface {
+    fn new(p: *mut T) -> ComPtr<T>
+    where
+        T: Interface,
+    {
         ComPtr(NonNull::new(p).unwrap())
     }
 }
@@ -178,7 +182,8 @@ impl Iterator for ErrorIter {
             let utf16_start = start as usize;
             let utf16_len = length as usize;
 
-            let err_text = String::from_utf16(&self.text[utf16_start..utf16_start + utf16_len]).ok()?;
+            let err_text =
+                String::from_utf16(&self.text[utf16_start..utf16_start + utf16_len]).ok()?;
 
             let byte_start = utf16_offset_to_utf8(&self.original, utf16_start);
             let byte_end = utf16_offset_to_utf8(&self.original, utf16_start + utf16_len);
@@ -201,7 +206,13 @@ pub struct SpellingError {
 }
 
 impl SpellingError {
-    pub fn text(&self) -> &str { &self.text }
-    pub fn start(&self) -> usize { self.start }
-    pub fn end(&self) -> usize { self.end }
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+    pub fn start(&self) -> usize {
+        self.start
+    }
+    pub fn end(&self) -> usize {
+        self.end
+    }
 }
