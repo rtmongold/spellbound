@@ -5,8 +5,7 @@
 Native spell checking with a small Rust API.
 
 This is a **maintained fork** of [euclio/spellbound](https://github.com/euclio/spellbound)
-(last upstream commit 2020). API 0.2 returns `Result` from `Checker::new` and exposes
-UTF-8 byte ranges on spelling errors.
+(last upstream commit 2020).
 
 | Platform | API                |
 | -------- | ------------------ |
@@ -25,12 +24,19 @@ use spellbound::Checker;
 
 fn main() -> Result<(), spellbound::Error> {
     let mut checker = Checker::new()?;
+    // Or: Checker::with_locale("en-US")?;
+
     for err in checker.check("I beleeve I can fly") {
         println!("{} @ {}..{}", err.text(), err.start(), err.end());
+        for suggestion in checker.suggest(err.text()) {
+            println!("  → {suggestion}");
+        }
     }
     Ok(())
 }
 ```
+
+Checker::new() defaults to English (en_US /en_GB on Linux, en-US on Windows). Use with_locale for another language. Locales may be written as en_US or en-US.
 
 ## Linux
 

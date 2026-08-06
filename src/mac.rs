@@ -8,14 +8,49 @@ use std::sync::{Mutex, OnceLock};
 use cocoa::{
     appkit::NSSpellChecker,
     base::{id, nil, NO},
-    foundation::{NSInteger, NSNotFound, NSString, NSUInteger},
+    foundation::{NSInteger, NSNotFound, NSRange, NSString, NSUInteger},
 };
+use objc::{msg_send, sel, sel_impl};
 
 fn checker() -> &'static Mutex<NSSpellCheckerWrapper> {
     static CHECKER: OnceLock<Mutex<NSSpellCheckerWrapper>> = OnceLock::new();
     CHECKER.get_or_init(|| {
         Mutex::new(unsafe { NSSpellCheckerWrapper(NSSpellChecker::sharedSpellChecker(nil)) })
     })
+}
+
+fn ns_string(s: &str) -> id {
+    unsafe { NSString::alloc(nil).init_str(s) }
+}
+
+fn language_id(language: &Option<String>) -> id {
+    match language {
+        Some(tag) => ns_string(tag),
+        None => nil,
+    }
+}
+
+fn nsarray_to_strings(array: id, max: usize) -> Vec<String> {
+    if array.is_null() {
+        return Vec::new();
+    }
+    unsafe {
+        let count: NSUInteger = msg_send![array, count];
+        let take = (count as usize).min(max);
+        let mut out = Vec::with_capacity(take);
+        for i in 0..take {
+            let item: id = msg_send![array, objectAtIndex: i];
+            if item.is_null() {
+                continue;
+            }
+            let bytes = item.UTF8String() as *const u8;
+            let len = item.len();
+            if let Ok(s) = str::from_utf8(slice::from_raw_parts(bytes, len)) {
+                out.push(s.to_owned());
+            }
+        }
+        out
+    }
 }
 
 /// `NSSpellChecker` is not thread safe. It should only be used from one thread, or it will cause
@@ -36,6 +71,8 @@ impl Deref for NSSpellCheckerWrapper {
 #[derive(Debug)]
 pub struct Checker {
     document_tag: NSInteger,
+    /// BCP-47 tag (`en-US`), or `None` for the system default language.
+    language: Option<String>,
 }
 
 impl Drop for Checker {
@@ -53,7 +90,46 @@ impl Checker {
     pub fn new() -> Result<Self, Error> {
         Ok(Self {
             document_tag: unsafe { NSSpellChecker::uniqueSpellDocumentTag(nil) },
+            language: None,
         })
+    }
+
+    pub fn with_locale(_hunspell: &str, bcp47: &str) -> Result<Self, Error> {
+        // Soft validation: reject empty; unavailable languages still may “work”
+        // with system fallback — zz_ZZ is only strictly Err on Unix.
+        if bcp47.is_empty() {
+            return Err(Error::Unavailable);
+        }
+        Ok(Self {
+            document_tag: unsafe { NSSpellChecker::uniqueSpellDocumentTag(nil) },
+            language: Some(bcp47.to_owned()),
+        })
+    }
+    pub fn suggest(&self, word: &str) -> Vec<String> {
+        const MAX: usize = 10;
+        if word.is_empty() {
+            return Vec::new();
+        }
+
+        let ns_word = ns_string(word);
+        let lang = language_id(&self.language);
+        let length: NSUInteger = unsafe { msg_send![ns_word, length] };
+        let range = NSRange {
+            location: 0,
+            length,
+        };
+
+        let guesses: id = unsafe {
+            let guard = checker().lock().unwrap();
+            msg_send![
+                **guard,
+                guessesForWordRange: range
+                inString: ns_word
+                language: lang
+                inSpellDocumentWithTag: self.document_tag
+            ]
+        };
+        nsarray_to_strings(guesses, MAX)
     }
 
     pub fn ignore(&mut self, word: &str) {
@@ -69,10 +145,11 @@ impl Checker {
     pub fn check(&mut self, text: &str) -> impl Iterator<Item = SpellingError> {
         SpellcheckIter {
             document_tag: self.document_tag,
-            ns_text: unsafe { NSString::alloc(nil).init_str(text) },
+            ns_text: ns_string(text),
             ns_offset: 0,
             original: text.to_owned(),
             byte_cursor: 0,
+            language: self.language.clone(),
         }
     }
 }
@@ -102,19 +179,21 @@ struct SpellcheckIter {
     ns_offset: NSUInteger,
     original: String,
     byte_cursor: usize,
+    language: Option<String>,
 }
 
 impl Iterator for SpellcheckIter {
     type Item = SpellingError;
 
     fn next(&mut self) -> Option<Self::Item> {
+        let lang = language_id(&self.language);
         let (range, _) =
             unsafe {
                 checker().lock().unwrap()
                 .checkSpellingOfString_startingAt_language_wrap_inSpellDocumentWithTag_wordCount(
                     self.ns_text,
                     self.ns_offset as NSInteger,
-                    nil,
+                    lang,
                     NO,
                     self.document_tag,
                 )

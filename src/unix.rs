@@ -1,10 +1,14 @@
 use crate::Error;
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
+use std::ptr;
 
-use hunspell_sys::{Hunhandle, Hunspell_add, Hunspell_create, Hunspell_destroy, Hunspell_spell};
+use hunspell_sys::{
+    Hunhandle, Hunspell_add, Hunspell_create, Hunspell_destroy, Hunspell_free_list, Hunspell_spell,
+    Hunspell_suggest,
+};
 
 const DICT_DIRS: &[&str] = &[
     "/usr/share/hunspell",
@@ -15,9 +19,9 @@ const DICT_DIRS: &[&str] = &[
 
 const DEFAULT_LOCALES: &[&str] = &["en_US", "en_GB"];
 
-fn find_dictionary() -> Option<(PathBuf, PathBuf)> {
+fn find_dictionary(locales: &[&str]) -> Option<(PathBuf, PathBuf)> {
     for dir in DICT_DIRS {
-        for locale in DEFAULT_LOCALES {
+        for locale in locales {
             let aff = Path::new(dir).join(format!("{locale}.aff"));
             let dic = Path::new(dir).join(format!("{locale}.dic"));
             if aff.is_file() && dic.is_file() {
@@ -28,6 +32,20 @@ fn find_dictionary() -> Option<(PathBuf, PathBuf)> {
     None
 }
 
+fn open_dictionary(locales: &[&str]) -> Result<*mut Hunhandle, Error> {
+    let (aff, dic) = find_dictionary(locales).ok_or(Error::Unavailable)?;
+    let hunspell = unsafe {
+        Hunspell_create(
+            aff.as_os_str().as_bytes().as_ptr() as *const i8,
+            dic.as_os_str().as_bytes().as_ptr() as *const i8,
+        )
+    };
+    if hunspell.is_null() {
+        return Err(Error::Unavailable);
+    }
+    Ok(hunspell)
+}
+
 #[derive(Debug)]
 pub struct Checker {
     hunspell: *mut Hunhandle,
@@ -35,16 +53,49 @@ pub struct Checker {
 
 impl Checker {
     pub fn new() -> Result<Self, Error> {
-        let (aff, dic) = find_dictionary().ok_or(Error::Unavailable)?;
+        Ok(Checker {
+            hunspell: open_dictionary(DEFAULT_LOCALES)?,
+        })
+    }
 
-        let hunspell = unsafe {
-            Hunspell_create(
-                aff.as_os_str().as_bytes().as_ptr() as *const i8,
-                dic.as_os_str().as_bytes().as_ptr() as *const i8,
-            )
+    pub fn with_locale(hunspell_locale: &str, _bcp47: &str) -> Result<Self, Error> {
+        Ok(Checker {
+            hunspell: open_dictionary(&[hunspell_locale])?,
+        })
+    }
+
+    pub fn suggest(&self, word: &str) -> Vec<String> {
+        const MAX: usize = 10;
+
+        let Ok(cstr) = CString::new(word) else {
+            return Vec::new();
         };
 
-        Ok(Checker { hunspell })
+        unsafe {
+            let mut list: *mut *mut i8 = ptr::null_mut();
+            let n = Hunspell_suggest(
+                self.hunspell,
+                &mut list,
+                cstr.as_bytes_with_nul().as_ptr() as *const i8,
+            );
+            if n <= 0 || list.is_null() {
+                return Vec::new();
+            }
+
+            let mut out = Vec::new();
+            let take = (n as usize).min(MAX);
+            for i in 0..take {
+                let p = *list.add(i);
+                if p.is_null() {
+                    continue;
+                }
+                if let Ok(s) = CStr::from_ptr(p).to_str() {
+                    out.push(s.to_owned());
+                }
+            }
+            Hunspell_free_list(self.hunspell, &mut list, n);
+            out
+        }
     }
 
     pub fn check<'a, 'b: 'a>(

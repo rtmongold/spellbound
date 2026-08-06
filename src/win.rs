@@ -9,11 +9,12 @@ use std::ptr::{self, NonNull};
 
 use winapi::{
     shared::{
+        ntdef::ULONG,
         winerror::{SUCCEEDED, S_FALSE, S_OK},
         wtypesbase::CLSCTX_INPROC_SERVER,
     },
     um::{
-        combaseapi::{CoCreateInstance, CoInitializeEx},
+        combaseapi::{CoCreateInstance, CoInitializeEx, CoTaskMemFree},
         objbase::COINIT_MULTITHREADED,
         spellcheck::{
             IEnumSpellingError, ISpellChecker, ISpellCheckerFactory, SpellCheckerFactory,
@@ -74,6 +75,50 @@ fn utf16_offset_to_utf8(s: &str, utf16_units: usize) -> usize {
     s.len()
 }
 
+fn create_factory() -> Result<ComPtr<ISpellCheckerFactory>, Error> {
+    let hr = unsafe { CoInitializeEx(ptr::null_mut(), COINIT_MULTITHREADED) };
+    if hr != S_OK && hr != S_FALSE {
+        return Err(Error::Unavailable);
+    }
+
+    let mut obj = ptr::null_mut();
+    let hr = unsafe {
+        CoCreateInstance(
+            &SpellCheckerFactory::uuidof(),
+            ptr::null_mut(),
+            CLSCTX_INPROC_SERVER,
+            &ISpellCheckerFactory::uuidof(),
+            &mut obj,
+        )
+    };
+    if !SUCCEEDED(hr) {
+        return Err(Error::Unavailable);
+    }
+    Ok(ComPtr::new(obj as *mut ISpellCheckerFactory))
+}
+
+fn open_for_language(bcp47: &str) -> Result<ComPtr<ISpellChecker>, Error> {
+    let factory = create_factory()?;
+    let lang = wide_string(bcp47);
+    let mut checker = ptr::null_mut();
+    let hr = unsafe { (*factory).CreateSpellChecker(lang.as_ptr(), &mut checker) };
+    if !SUCCEEDED(hr) {
+        return Err(Error::Unavailable);
+    }
+    Ok(ComPtr::new(checker))
+}
+
+unsafe fn wide_ptr_to_string(p: *mut u16) -> Option<String> {
+    if p.is_null() {
+        return None;
+    }
+    let mut len = 0usize;
+    while *p.add(len) != 0 {
+        len += 1;
+    }
+    String::from_utf16(std::slice::from_raw_parts(p, len)).ok()
+}
+
 #[derive(Debug)]
 pub struct Checker {
     checker: ComPtr<ISpellChecker>,
@@ -81,36 +126,47 @@ pub struct Checker {
 
 impl Checker {
     pub fn new() -> Result<Self, Error> {
-        let hr = unsafe { CoInitializeEx(ptr::null_mut(), COINIT_MULTITHREADED) };
-        if hr != S_OK && hr != S_FALSE {
-            return Err(Error::Unavailable);
+        Self::with_locale("en_US", "en-US")
+    }
+
+    pub fn with_locale(_hunspell: &str, bcp47: &str) -> Result<Self, Error> {
+        Ok(Checker {
+            checker: open_for_language(bcp47)?,
+        })
+    }
+
+    pub fn suggest(&self, word: &str) -> Vec<String> {
+        const MAX: usize = 10;
+
+        if word.is_empty() {
+            return Vec::new();
         }
 
-        let mut obj = ptr::null_mut();
-        let hr = unsafe {
-            CoCreateInstance(
-                &SpellCheckerFactory::uuidof(),
-                ptr::null_mut(),
-                CLSCTX_INPROC_SERVER,
-                &ISpellCheckerFactory::uuidof(),
-                &mut obj,
-            )
-        };
-
-        if !SUCCEEDED(hr) {
-            return Err(Error::Unavailable);
+        let wide = wide_string(word);
+        let mut enum_str = ptr::null_mut();
+        let hr = unsafe { (*self.checker).Suggest(wide.as_ptr(), &mut enum_str) };
+        if !SUCCEEDED(hr) || enum_str.is_null() {
+            return Vec::new();
         }
-        let factory = ComPtr::new(obj as *mut ISpellCheckerFactory);
+        let enum_str = ComPtr::new(enum_str);
 
-        let mut checker = ptr::null_mut();
-        let lang = wide_string("en-US");
-        let hr = unsafe { (*factory).CreateSpellChecker(lang.as_ptr(), &mut checker) };
-        if !SUCCEEDED(hr) {
-            return Err(Error::Unavailable);
+        let mut out = Vec::new();
+        while out.len() < MAX {
+            let mut item: *mut u16 = ptr::null_mut();
+            let mut fetched: ULONG = 0;
+            let hr = unsafe { (*enum_str).Next(1, &mut item, &mut fetched) };
+            if hr == S_FALSE || fetched == 0 || item.is_null() {
+                break;
+            }
+            if let Some(s) = unsafe { wide_ptr_to_string(item) } {
+                out.push(s);
+            }
+            unsafe { CoTaskMemFree(item as *mut _) };
+            if !SUCCEEDED(hr) && hr != S_FALSE {
+                break;
+            }
         }
-        let checker = ComPtr::new(checker);
-
-        Ok(Checker { checker })
+        out
     }
 
     pub fn check(&mut self, text: &str) -> impl Iterator<Item = SpellingError> {
