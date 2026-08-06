@@ -140,12 +140,12 @@ mod tests {
 
     #[test]
     fn single_error() {
-        let text = "asdf";
+        let text = "beleeve";
         let mut checker = Checker::new().unwrap();
         let errors = checker.check(text).collect::<Vec<_>>();
         assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].text(), "asdf");
-        assert_eq!(&text[errors[0].start()..errors[0].end()], "asdf");
+        assert_eq!(errors[0].text(), "beleeve");
+        assert_eq!(&text[errors[0].start()..errors[0].end()], "beleeve");
     }
 
     #[test]
