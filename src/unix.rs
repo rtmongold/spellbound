@@ -95,10 +95,7 @@ impl Checker {
         }
     }
 
-    pub fn check<'a, 'b: 'a>(
-        &'b mut self,
-        text: &'a str,
-    ) -> impl Iterator<Item = SpellingError> + 'a {
+    pub fn check<'a>(&self, text: &'a str) -> impl Iterator<Item = SpellingError> + 'a {
         let hunspell = self.hunspell;
 
         words(text).filter_map(move |(start, end, word)| {

@@ -96,11 +96,13 @@ impl Checker {
     }
 
     /// Check a text for spelling errors. Returns an iterator over the errors present in the text.
-    pub fn check<'a, 'b: 'a>(
-        &'b mut self,
-        text: &'a str,
-    ) -> impl Iterator<Item = SpellingError> + 'a {
+    pub fn check<'a>(&self, text: &'a str) -> impl Iterator<Item = SpellingError> + 'a {
         self.0.check(text).map(SpellingError)
+    }
+
+    /// Returns true if `word` is spelled correctly.
+    pub fn is_correct(&self, word: &str) -> bool {
+        self.check(word).next().is_none()
     }
 
     /// Instructs the spell checker to ignore a word in future checks. The word is temporarily
@@ -134,14 +136,14 @@ mod tests {
     #[test]
     fn no_errors() {
         let text = "I'm happy that this sentence has no errors.";
-        let mut checker = Checker::new().unwrap();
+        let checker = Checker::new().unwrap();
         assert_eq!(checker.check(text).count(), 0);
     }
 
     #[test]
     fn single_error() {
         let text = "beleeve";
-        let mut checker = Checker::new().unwrap();
+        let checker = Checker::new().unwrap();
         let errors = checker.check(text).collect::<Vec<_>>();
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].text(), "beleeve");
@@ -151,7 +153,7 @@ mod tests {
     #[test]
     fn multiple_errors() {
         let text = "asdf hjkl qwer uiop";
-        let mut checker = Checker::new().unwrap();
+        let checker = Checker::new().unwrap();
         let errors = checker.check(text).collect::<Vec<_>>();
         assert_eq!(errors.len(), 4);
         assert_eq!(errors[0].text(), "asdf");
@@ -163,7 +165,7 @@ mod tests {
     #[test]
     fn error_ranges() {
         let text = "one asdf two";
-        let mut checker = Checker::new().unwrap();
+        let checker = Checker::new().unwrap();
         let errors: Vec<_> = checker.check(text).collect();
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].text(), "asdf");
@@ -174,31 +176,24 @@ mod tests {
 
     #[test]
     fn empty() {
-        let mut checker = Checker::new().unwrap();
+        let checker = Checker::new().unwrap();
         assert_eq!(checker.check("").count(), 0);
     }
 
     #[test]
     fn ignore() {
         let mut checker = Checker::new().unwrap();
-
         assert_eq!(checker.check("foobarbaz").count(), 1);
-
         checker.ignore("foobarbaz");
-
         assert_eq!(checker.check("foobarbaz").count(), 0);
     }
 
     #[test]
     fn ignore_not_permanent() {
         let mut checker = Checker::new().unwrap();
-
         checker.ignore("foobarbaz");
-
         drop(checker);
-
-        let mut checker = Checker::new().unwrap();
-
+        let checker = Checker::new().unwrap();
         assert_eq!(checker.check("foobarbaz").count(), 1);
     }
 
@@ -219,5 +214,12 @@ mod tests {
         let checker = Checker::new().unwrap();
         let suggestions = checker.suggest("beleeve");
         assert!(!suggestions.is_empty());
+    }
+
+    #[test]
+    fn is_correct() {
+        let checker = Checker::new().unwrap();
+        assert!(checker.is_correct("believe"));
+        assert!(!checker.is_correct("beleeve"));
     }
 }

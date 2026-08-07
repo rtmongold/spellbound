@@ -38,10 +38,9 @@ fn open_for_language(bcp47: &str) -> Result<ISpellChecker, Error> {
     // S_OK / S_FALSE (already initialized) both succeed via windows::Result
     let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
 
-    let factory: ISpellCheckerFactory = unsafe {
-        CoCreateInstance(&SpellCheckerFactory, None, CLSCTX_INPROC_SERVER)
-    }
-    .map_err(|_| Error::Unavailable)?;
+    let factory: ISpellCheckerFactory =
+        unsafe { CoCreateInstance(&SpellCheckerFactory, None, CLSCTX_INPROC_SERVER) }
+            .map_err(|_| Error::Unavailable)?;
 
     let tag = HSTRING::from(bcp47);
     unsafe { factory.CreateSpellChecker(&tag) }.map_err(|_| Error::Unavailable)
@@ -95,7 +94,7 @@ impl Checker {
         out
     }
 
-    pub fn check(&mut self, text: &str) -> impl Iterator<Item = SpellingError> {
+    pub fn check(&self, text: &str) -> impl Iterator<Item = SpellingError> {
         if text.is_empty() {
             return ErrorIter {
                 original: String::new(),
