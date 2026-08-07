@@ -1,4 +1,4 @@
-//! `spellbound` is a small crate that binds to the native platform's spell checking APIs and
+//! `spellkit` is a small crate that binds to the native platform's spell checking APIs and
 //! provides a friendlier API.
 //!
 //! This corresponds to [`ISpellChecker`] on Windows, [`NSSpellChecker`] on MacOS, and [`hunspell`]
@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! ```
-//! use spellbound::Checker;
+//! use spellkit::Checker;
 //!
 //! let mut checker = Checker::new().unwrap();
 //!

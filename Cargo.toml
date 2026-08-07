@@ -1,11 +1,11 @@
 [package]
-name = "spellbound"
+name = "spellkit"
 description = "Bindings to your friendly neighborhood spellchecker."
 keywords = ["spellcheck", "spellchecker", "hunspell"]
 categories = ["os", "text-processing"]
-documentation = "https://docs.rs/spellbound"
-repository = "https://github.com/rtmongold/spellbound"
-version = "0.2.1"
+documentation = "https://docs.rs/spellkit"
+repository = "https://github.com/rtmongold/spellkit"
+version = "0.3.0"
 authors = [
     "Andy Russell <arussell123@gmail.com>",
     "Robert Mongold <rtmongold@gmail.com>"
