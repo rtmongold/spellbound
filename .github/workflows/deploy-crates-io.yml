@@ -1,3 +1,15 @@
-environment:
-  name: crates-io
-  url: https://crates.io/crates/spellkit/${{ github.event.release.tag_name }}
+name: Deploy crates.io record
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    environment:
+      name: crates-io
+      url: https://crates.io/crates/spellkit
+    steps:
+      - name: Record deployment
+        run: echo "Deployment for ${{ github.event.release.tag_name }}"
