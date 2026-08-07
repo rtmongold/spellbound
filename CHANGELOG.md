@@ -6,10 +6,14 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `Checker::is_correct`
+
 ### Changed
 - Windows backend now uses the official `windows` crate instead of `winapi`
 - Bump `cfg-if` to 1.x
 - macOS backend now uses `objc2` / `objc2-app-kit` instead of `cocoa` / `objc`
+- `Checker::check` now takes `&self` instead of `&mut self`
 
 ### Fixed
 - Pass null-terminated dictionary paths to Hunspell on Linux (stops spurious

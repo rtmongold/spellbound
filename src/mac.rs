@@ -22,7 +22,10 @@ fn language_ref(language: &Option<String>) -> Option<Retained<NSString>> {
     language.as_ref().map(|tag| ns_string(tag))
 }
 
-fn nsarray_to_strings(array: Option<&objc2_foundation::NSArray<NSString>>, max: usize) -> Vec<String> {
+fn nsarray_to_strings(
+    array: Option<&objc2_foundation::NSArray<NSString>>,
+    max: usize,
+) -> Vec<String> {
     let Some(array) = array else {
         return Vec::new();
     };
@@ -107,7 +110,7 @@ impl Checker {
         with_checker(|c| c.ignoreWord_inSpellDocumentWithTag(&ns_word, tag));
     }
 
-    pub fn check(&mut self, text: &str) -> impl Iterator<Item = SpellingError> {
+    pub fn check(&self, text: &str) -> impl Iterator<Item = SpellingError> {
         SpellcheckIter {
             document_tag: self.document_tag,
             ns_text: ns_string(text),
