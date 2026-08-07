@@ -10,7 +10,8 @@ authors = [
     "Andy Russell <arussell123@gmail.com>",
     "Robert Mongold <rtmongold@gmail.com>"
 ]
-edition = "2021"
+edition = "2024"
+rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 

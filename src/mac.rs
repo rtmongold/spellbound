@@ -110,7 +110,7 @@ impl Checker {
         with_checker(|c| c.ignoreWord_inSpellDocumentWithTag(&ns_word, tag));
     }
 
-    pub fn check(&self, text: &str) -> impl Iterator<Item = SpellingError> {
+    pub fn check(&self, text: &str) -> impl Iterator<Item = SpellingError> + use<> {
         SpellcheckIter {
             document_tag: self.document_tag,
             ns_text: ns_string(text),
