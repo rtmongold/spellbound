@@ -1,8 +1,6 @@
-extern crate spellbound;
-
 use std::env;
 
-use spellbound::Checker;
+use spellkit::Checker;
 
 fn main() {
     let text = env::args().skip(1).collect::<Vec<String>>().join(" ");

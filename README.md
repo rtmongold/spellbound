@@ -1,10 +1,10 @@
-# spellbound
+# spellkit
 
-[![CI](https://github.com/rtmongold/spellbound/actions/workflows/ci.yml/badge.svg)](https://github.com/rtmongold/spellbound/actions/workflows/ci.yml)
+[![CI](https://github.com/rtmongold/spellkit/actions/workflows/ci.yml/badge.svg)](https://github.com/rtmongold/spellkit/actions/workflows/ci.yml)
 
 Native spell checking with a small Rust API.
 
-This is a **maintained fork** of [euclio/spellbound](https://github.com/euclio/spellbound)
+This project is **based on** [euclio/spellbound](https://github.com/euclio/spellbound)
 (last upstream commit 2020).
 
 | Platform | API                |
@@ -20,9 +20,9 @@ This is a **maintained fork** of [euclio/spellbound](https://github.com/euclio/s
 ## Example
 
 ```rust
-use spellbound::Checker;
+use spellkit::Checker;
 
-fn main() -> Result<(), spellbound::Error> {
+fn main() -> Result<(), spellkit::Error> {
     let checker = Checker::new()?;
     // Or: Checker::with_locale("en-US")?;
 
@@ -62,4 +62,4 @@ MIT OR Apache-2.0
 
 ## Credits
 
-Originally by [Andy Russell](https://github.com/euclio). Maintained in this fork by Robert Mongold.
+Originally by [Andy Russell](https://github.com/euclio). Maintained as `spellkit` by Robert Mongold.

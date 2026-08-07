@@ -6,6 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-07
+
+### Breaking
+- Renamed the crate from `spellbound` to `spellkit`
+
 ### Changed
 - Document locale and threading caveats in the README
 - Drop obsolete `unexpected_cfgs` lint (no longer needed after objc2)
