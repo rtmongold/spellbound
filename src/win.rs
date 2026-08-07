@@ -5,7 +5,6 @@ use std::iter;
 use std::os::windows::ffi::OsStrExt;
 
 use windows::{
-    core::{HSTRING, PWSTR},
     Win32::{
         Foundation::S_FALSE,
         Globalization::{
@@ -13,10 +12,11 @@ use windows::{
             SpellCheckerFactory,
         },
         System::Com::{
-            CoCreateInstance, CoInitializeEx, CoTaskMemFree, CLSCTX_INPROC_SERVER,
-            COINIT_MULTITHREADED,
+            CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
+            CoTaskMemFree,
         },
     },
+    core::{HSTRING, PWSTR},
 };
 
 fn wide_string(s: &str) -> Vec<u16> {
@@ -94,7 +94,7 @@ impl Checker {
         out
     }
 
-    pub fn check(&self, text: &str) -> impl Iterator<Item = SpellingError> {
+    pub fn check(&self, text: &str) -> impl Iterator<Item = SpellingError> + use<> {
         if text.is_empty() {
             return ErrorIter {
                 original: String::new(),

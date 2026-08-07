@@ -96,7 +96,7 @@ impl Checker {
     }
 
     /// Check a text for spelling errors. Returns an iterator over the errors present in the text.
-    pub fn check<'a>(&self, text: &'a str) -> impl Iterator<Item = SpellingError> + 'a {
+    pub fn check<'a>(&self, text: &'a str) -> impl Iterator<Item = SpellingError> + 'a + use<'a> {
         self.0.check(text).map(SpellingError)
     }
 

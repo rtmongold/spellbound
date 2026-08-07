@@ -14,6 +14,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Bump `cfg-if` to 1.x
 - macOS backend now uses `objc2` / `objc2-app-kit` instead of `cocoa` / `objc`
 - `Checker::check` now takes `&self` instead of `&mut self`
+- Bump to Edition 2024 / MSRV 1.85.
 
 ### Fixed
 - Pass null-terminated dictionary paths to Hunspell on Linux (stops spurious
