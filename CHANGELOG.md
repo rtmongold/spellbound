@@ -6,6 +6,9 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Windows backend now uses the official `windows` crate instead of `winapi`
+- Bump `cfg-if` to 1.x
 ### Fixed
 - Pass null-terminated dictionary paths to Hunspell on Linux (stops spurious
   `cannot open …aff` stderr noise)
