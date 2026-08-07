@@ -9,6 +9,8 @@ This project follows [Semantic Versioning](https://semver.org/).
 ### Changed
 - Windows backend now uses the official `windows` crate instead of `winapi`
 - Bump `cfg-if` to 1.x
+- macOS backend now uses `objc2` / `objc2-app-kit` instead of `cocoa` / `objc`
+
 ### Fixed
 - Pass null-terminated dictionary paths to Hunspell on Linux (stops spurious
   `cannot open …aff` stderr noise)
