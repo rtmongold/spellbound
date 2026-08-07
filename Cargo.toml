@@ -15,8 +15,9 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 
 [target.'cfg(target_os="macos")'.dependencies]
-cocoa = "0.20.0"
-objc = "0.2"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSRange"] }
+objc2-app-kit = { version = "0.3", features = ["NSSpellChecker"] }
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.62"
