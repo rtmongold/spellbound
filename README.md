@@ -23,7 +23,7 @@ This is a **maintained fork** of [euclio/spellbound](https://github.com/euclio/s
 use spellbound::Checker;
 
 fn main() -> Result<(), spellbound::Error> {
-    let mut checker = Checker::new()?;
+    let checker = Checker::new()?;
     // Or: Checker::with_locale("en-US")?;
 
     for err in checker.check("I beleeve I can fly") {
@@ -36,7 +36,17 @@ fn main() -> Result<(), spellbound::Error> {
 }
 ```
 
-Checker::new() defaults to English (en_US /en_GB on Linux, en-US on Windows). Use with_locale for another language. Locales may be written as en_US or en-US.
+`Checker::new()` defaults to English (`en_US` / `en_GB` on Linux, `en-US` on Windows). Use `with_locale` for another language. Locales may be written as `en_US` or `en-US`.
+
+Unknown or unsupported locales behave differently by platform:
+
+- **Linux:** missing dictionary / unknown locale → `Error::Unavailable`
+- **macOS:** empty locale → `Error::Unavailable`; unknown tags may still create a checker (system fallback)
+- **Windows:** unsupported language tag → `Error::Unavailable`
+
+## Threading
+
+macOS serializes access to the shared `NSSpellChecker`. Do not assume `Checker` is `Send` / `Sync` across platforms.
 
 ## Linux
 

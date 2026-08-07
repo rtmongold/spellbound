@@ -33,6 +33,3 @@ hunspell-sys = "0.3.1"
 
 [dependencies]
 cfg-if = "1.0.4"
-
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
