@@ -18,9 +18,13 @@ readme = "README.md"
 cocoa = "0.20.0"
 objc = "0.2"
 
-[target.'cfg(windows)'.dependencies.winapi]
-version = "0.3"
-features = ["combaseapi", "objbase", "spellcheck"]
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.62"
+features = [
+    "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_System_Com",
+]
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 hunspell-sys = "0.3.1"

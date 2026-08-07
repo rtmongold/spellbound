@@ -1,64 +1,23 @@
 use crate::Error;
 
 use std::ffi::OsStr;
-use std::fmt::{self, Debug};
 use std::iter;
-use std::ops::Deref;
 use std::os::windows::ffi::OsStrExt;
-use std::ptr::{self, NonNull};
 
-use winapi::{
-    shared::{
-        ntdef::ULONG,
-        winerror::{SUCCEEDED, S_FALSE, S_OK},
-        wtypesbase::CLSCTX_INPROC_SERVER,
-    },
-    um::{
-        combaseapi::{CoCreateInstance, CoInitializeEx, CoTaskMemFree},
-        objbase::COINIT_MULTITHREADED,
-        spellcheck::{
-            IEnumSpellingError, ISpellChecker, ISpellCheckerFactory, SpellCheckerFactory,
+use windows::{
+    core::{HSTRING, PWSTR},
+    Win32::{
+        Foundation::S_FALSE,
+        Globalization::{
+            IEnumSpellingError, ISpellChecker, ISpellCheckerFactory, ISpellingError,
+            SpellCheckerFactory,
         },
-        unknwnbase::IUnknown,
+        System::Com::{
+            CoCreateInstance, CoInitializeEx, CoTaskMemFree, CLSCTX_INPROC_SERVER,
+            COINIT_MULTITHREADED,
+        },
     },
-    Class, Interface,
 };
-
-struct ComPtr<T>(NonNull<T>);
-
-impl<T> ComPtr<T> {
-    fn new(p: *mut T) -> ComPtr<T>
-    where
-        T: Interface,
-    {
-        ComPtr(NonNull::new(p).unwrap())
-    }
-}
-
-impl<T> Deref for ComPtr<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        unsafe { &*self.0.as_ptr() }
-    }
-}
-
-impl<T> Debug for ComPtr<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple("ComPtr")
-            .field(&format_args!("{:p}", self.0.as_ptr()))
-            .finish()
-    }
-}
-
-impl<T> Drop for ComPtr<T> {
-    fn drop(&mut self) {
-        unsafe {
-            let unknown = self.0.as_ptr() as *mut IUnknown;
-            (*unknown).Release();
-        }
-    }
-}
 
 fn wide_string(s: &str) -> Vec<u16> {
     OsStr::new(s).encode_wide().chain(iter::once(0)).collect()
@@ -75,53 +34,22 @@ fn utf16_offset_to_utf8(s: &str, utf16_units: usize) -> usize {
     s.len()
 }
 
-fn create_factory() -> Result<ComPtr<ISpellCheckerFactory>, Error> {
-    let hr = unsafe { CoInitializeEx(ptr::null_mut(), COINIT_MULTITHREADED) };
-    if hr != S_OK && hr != S_FALSE {
-        return Err(Error::Unavailable);
-    }
+fn open_for_language(bcp47: &str) -> Result<ISpellChecker, Error> {
+    // S_OK / S_FALSE (already initialized) both succeed via windows::Result
+    let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
 
-    let mut obj = ptr::null_mut();
-    let hr = unsafe {
-        CoCreateInstance(
-            &SpellCheckerFactory::uuidof(),
-            ptr::null_mut(),
-            CLSCTX_INPROC_SERVER,
-            &ISpellCheckerFactory::uuidof(),
-            &mut obj,
-        )
-    };
-    if !SUCCEEDED(hr) {
-        return Err(Error::Unavailable);
+    let factory: ISpellCheckerFactory = unsafe {
+        CoCreateInstance(&SpellCheckerFactory, None, CLSCTX_INPROC_SERVER)
     }
-    Ok(ComPtr::new(obj as *mut ISpellCheckerFactory))
-}
+    .map_err(|_| Error::Unavailable)?;
 
-fn open_for_language(bcp47: &str) -> Result<ComPtr<ISpellChecker>, Error> {
-    let factory = create_factory()?;
-    let lang = wide_string(bcp47);
-    let mut checker = ptr::null_mut();
-    let hr = unsafe { (*factory).CreateSpellChecker(lang.as_ptr(), &mut checker) };
-    if !SUCCEEDED(hr) {
-        return Err(Error::Unavailable);
-    }
-    Ok(ComPtr::new(checker))
-}
-
-unsafe fn wide_ptr_to_string(p: *mut u16) -> Option<String> {
-    if p.is_null() {
-        return None;
-    }
-    let mut len = 0usize;
-    while *p.add(len) != 0 {
-        len += 1;
-    }
-    String::from_utf16(std::slice::from_raw_parts(p, len)).ok()
+    let tag = HSTRING::from(bcp47);
+    unsafe { factory.CreateSpellChecker(&tag) }.map_err(|_| Error::Unavailable)
 }
 
 #[derive(Debug)]
 pub struct Checker {
-    checker: ComPtr<ISpellChecker>,
+    checker: ISpellChecker,
 }
 
 impl Checker {
@@ -142,27 +70,25 @@ impl Checker {
             return Vec::new();
         }
 
-        let wide = wide_string(word);
-        let mut enum_str = ptr::null_mut();
-        let hr = unsafe { (*self.checker).Suggest(wide.as_ptr(), &mut enum_str) };
-        if !SUCCEEDED(hr) || enum_str.is_null() {
+        let Ok(enum_str) = (unsafe { self.checker.Suggest(&HSTRING::from(word)) }) else {
             return Vec::new();
-        }
-        let enum_str = ComPtr::new(enum_str);
+        };
 
         let mut out = Vec::new();
         while out.len() < MAX {
-            let mut item: *mut u16 = ptr::null_mut();
-            let mut fetched: ULONG = 0;
-            let hr = unsafe { (*enum_str).Next(1, &mut item, &mut fetched) };
-            if hr == S_FALSE || fetched == 0 || item.is_null() {
+            let mut item = [PWSTR::null()];
+            let mut fetched = 0u32;
+            let hr = unsafe { enum_str.Next(&mut item, Some(&mut fetched)) };
+            if fetched == 0 || item[0].is_null() {
                 break;
             }
-            if let Some(s) = unsafe { wide_ptr_to_string(item) } {
+            if let Ok(s) = unsafe { item[0].to_string() } {
                 out.push(s);
             }
-            unsafe { CoTaskMemFree(item as *mut _) };
-            if !SUCCEEDED(hr) && hr != S_FALSE {
+            unsafe {
+                CoTaskMemFree(Some(item[0].as_ptr() as *const _));
+            }
+            if hr.is_err() && hr != S_FALSE {
                 break;
             }
         }
@@ -180,21 +106,12 @@ impl Checker {
 
         let original = text.to_owned();
         let wide = wide_string(text);
-        let mut errors = ptr::null_mut();
-        let hr = unsafe { (*self.checker).ComprehensiveCheck(wide.as_ptr(), &mut errors) };
-        if !SUCCEEDED(hr) {
-            return ErrorIter {
-                original,
-                text: wide,
-                iter: None,
-            };
-        }
-        let errors = ComPtr::new(errors);
+        let iter = unsafe { self.checker.ComprehensiveCheck(&HSTRING::from(text)) }.ok();
 
         ErrorIter {
             original,
             text: wide,
-            iter: Some(errors),
+            iter,
         }
     }
 
@@ -202,19 +119,14 @@ impl Checker {
         if word.is_empty() {
             return;
         }
-
-        let word = wide_string(word);
-        let hr = unsafe { (*self.checker).Ignore(word.as_ptr()) };
-        if !SUCCEEDED(hr) {
-            return;
-        }
+        let _ = unsafe { self.checker.Ignore(&HSTRING::from(word)) };
     }
 }
 
 struct ErrorIter {
     original: String,
     text: Vec<u16>,
-    iter: Option<ComPtr<IEnumSpellingError>>,
+    iter: Option<IEnumSpellingError>,
 }
 
 impl Iterator for ErrorIter {
@@ -223,35 +135,25 @@ impl Iterator for ErrorIter {
     fn next(&mut self) -> Option<SpellingError> {
         let iter = self.iter.as_ref()?;
 
-        let mut err = ptr::null_mut();
-        if unsafe { (*iter).Next(&mut err) } != S_FALSE {
-            let err = ComPtr::new(err);
-
-            let mut start = 0;
-            let mut length = 0;
-
-            unsafe {
-                (*err).get_Length(&mut length);
-                (*err).get_StartIndex(&mut start);
-            }
-
-            let utf16_start = start as usize;
-            let utf16_len = length as usize;
-
-            let err_text =
-                String::from_utf16(&self.text[utf16_start..utf16_start + utf16_len]).ok()?;
-
-            let byte_start = utf16_offset_to_utf8(&self.original, utf16_start);
-            let byte_end = utf16_offset_to_utf8(&self.original, utf16_start + utf16_len);
-
-            return Some(SpellingError {
-                text: err_text,
-                start: byte_start,
-                end: byte_end,
-            });
-        } else {
-            None
+        let mut err: Option<ISpellingError> = None;
+        let hr = unsafe { iter.Next(&mut err) };
+        if hr == S_FALSE {
+            return None;
         }
+        let err = err?;
+
+        let start = unsafe { err.StartIndex() }.ok()? as usize;
+        let length = unsafe { err.Length() }.ok()? as usize;
+
+        let err_text = String::from_utf16(&self.text[start..start + length]).ok()?;
+        let byte_start = utf16_offset_to_utf8(&self.original, start);
+        let byte_end = utf16_offset_to_utf8(&self.original, start + length);
+
+        Some(SpellingError {
+            text: err_text,
+            start: byte_start,
+            end: byte_end,
+        })
     }
 }
 
