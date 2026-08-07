@@ -6,6 +6,10 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Document locale and threading caveats in the README
+- Drop obsolete `unexpected_cfgs` lint (no longer needed after objc2)
+
 ## [0.2.1] - 2026-08-07
 
 ### Added
